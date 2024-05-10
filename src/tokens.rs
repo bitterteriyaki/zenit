@@ -1,122 +1,85 @@
+use std::collections::LinkedList;
 use std::fmt::{Debug, Formatter, Result};
-use std::process::exit;
 
-#[derive(PartialEq, Clone)]
-pub enum TokenType {
+#[derive(PartialEq)]
+pub enum TokenKind {
     Exit,
-    IntegerLiteral,
+    Integer,
     Semicolon,
 }
 
-impl Debug for TokenType {
+impl Debug for TokenKind {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match self {
-            TokenType::Exit => write!(f, "Exit"),
-            TokenType::IntegerLiteral => write!(f, "IntegerLiteral"),
-            TokenType::Semicolon => write!(f, "Semicolon"),
+            TokenKind::Exit => write!(f, "Exit"),
+            TokenKind::Integer => write!(f, "Integer"),
+            TokenKind::Semicolon => write!(f, "Semicolon"),
         }
     }
 }
 
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct Token {
-    pub token_type: TokenType,
+    pub kind: TokenKind,
     pub value: Option<String>,
 }
 
 pub struct Tokenizer {
-    source: String,
-    index: usize,
+    source: LinkedList<char>,
 }
 
 impl Tokenizer {
-    pub fn new(input: &str) -> Tokenizer {
-        Tokenizer { source: input.to_string(), index: 0 }
+    pub fn new(contents: &str) -> Tokenizer {
+        Tokenizer { source: contents.chars().collect() }
     }
 
-    fn peak(&self, offset: usize) -> Option<char> {
-        if self.index + offset >= self.source.len() {
-            return None;
-        }
+    pub fn tokenize(&mut self) -> LinkedList<Token> {
+        let mut tokens: LinkedList<Token> = LinkedList::new();
+        let mut buffer = String::new();
+        // Keep the original source in case we need it later.
+        let mut source = self.source.clone();
+        
 
-        let selected = self.source
-            .chars()
-            .nth(self.index + offset)
-            .expect("Failed to peak character");
+        while let Some(ch) = source.pop_front() {
+            match ch {
+                t if t.is_alphabetic() => {
+                    buffer.push(t);
 
-        Some(selected)
-    }
+                    // Consume all the characters that are alphabetic.
+                    while let Some(&c) = source.front() {
+                        if !c.is_alphabetic() {
+                            break;
+                        }
 
-    fn consume(&mut self) -> Option<char> {
-        if self.index >= self.source.len() {
-            return None;
-        }
-
-        let selected = self.source
-            .chars()
-            .nth(self.index)
-            .expect("Failed to consume character");
-        self.index += 1;
-
-        Some(selected)
-    }
-
-    pub fn tokenize(&mut self) -> Vec<Token> {
-        let mut tokens: Vec<Token> = Vec::new();
-        let mut current_token = String::new();
-
-        while let Some(c) = self.consume() {
-            if c.is_alphabetic() {
-                current_token.push(c);
-
-                while let Some(d) = self.peak(0) {
-                    if !d.is_alphabetic() {
-                        break;
+                        buffer.push(c);
+                        source.pop_front();
                     }
 
-                    let consumed = self.consume()
-                        .expect("Failed to consume character");
-
-                    current_token.push(consumed);
-                }
-
-                if current_token == "exit" {
-                    tokens.push(Token { token_type: TokenType::Exit, value: None });
-                    current_token.clear();
-                    continue;
-                } else {
-                    eprintln!("Unexpected text token: {}", current_token);
-                    exit(1);
-                }
-            } else if c.is_numeric() {
-                current_token.push(c);
-
-                while let Some(d) = self.peak(0) {
-                    if !d.is_numeric() {
-                        break;
+                    match buffer.as_str() {
+                        "exit" => tokens.push_back(Token { kind: TokenKind::Exit, value: None }),
+                        _ => panic!("Unknown token: {}", buffer),
                     }
 
-                    let consumed = self.consume()
-                        .expect("Failed to consume character");
+                    buffer.clear();
+                },
+                t if t.is_numeric() => {
+                    buffer.push(t);
 
-                    current_token.push(consumed);
-                }
+                    // Consume all the characters that are numeric.
+                    while let Some(&c) = source.front() {
+                        if !c.is_numeric() {
+                            break;
+                        }
 
-                tokens.push(Token {
-                    token_type: TokenType::IntegerLiteral,
-                    value: Some(current_token.clone()),
-                });
-                current_token.clear();
-            } else if c == ';' {
-                tokens.push(Token { token_type: TokenType::Semicolon, value: None });
-                current_token.clear();
-                continue;
-            } else if c.is_whitespace() {
-                continue;
-            } else {
-                eprintln!("Unexpected unknown token: {}", c);
-                exit(1);
+                        buffer.push(c);
+                        source.pop_front();
+                    }
+
+                    tokens.push_back(Token { kind: TokenKind::Integer, value: Some(buffer.clone()) });
+                    buffer.clear();
+                },
+                ';' => tokens.push_back(Token { kind: TokenKind::Semicolon, value: None }),
+                ' ' | '\n' => continue,
+                _ => panic!("Unknown character: {}", ch),
             }
         }
 
